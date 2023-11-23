@@ -29,7 +29,7 @@ class ScreenScanner:
 
         self.affinity_proc_template = downsample_icon(load_from_qrc(f':/icons/{int(round_half_down(ui_scale)*100)}.png'), ui_scale)
         
-        self.screen_capture = WindowCapture('Warframe', ( int(750*(1+(ui_scale-1)*0.5)) , int(300*(1+(ui_scale-1)*0.5)) ) , self.main_window)
+        self.screen_capture = WindowCapture(self.main_window.visible_windows[self.main_window.ui.window_name_combo.currentIndex()][1], ( int(750*(1+(ui_scale-1)*0.5)) , int(300*(1+(ui_scale-1)*0.5)) ) , self.main_window, hwnd=self.main_window.visible_windows[self.main_window.ui.window_name_combo.currentIndex()][0])
 
         # white text requires a special filter
         self.text_hsv_filter = white_hsv_filter if self.main_window.ui.text_color_widget.color_hsv == [0,0,255] else hsv_filter
@@ -45,7 +45,7 @@ class ScreenScanner:
 
     def update_ui_scale(self):
         ui_scale = self.main_window.window_data.ui_scale
-        self.screen_capture = WindowCapture('Warframe', ( int(750*(1+(ui_scale-1)*0.5)) , int(300*(1+(ui_scale-1)*0.5)) ) , self.main_window)
+        self.screen_capture = WindowCapture(self.main_window.visible_windows[self.main_window.ui.window_name_combo.currentIndex()][1], ( int(750*(1+(ui_scale-1)*0.5)) , int(300*(1+(ui_scale-1)*0.5)) ) , self.main_window, hwnd=self.main_window.visible_windows[self.main_window.ui.window_name_combo.currentIndex()][0])
         ui_rotation = -3.65/self.main_window.window_data.ui_scale
         self.M = cv2.getRotationMatrix2D((0,0), ui_rotation, 1)
         self.affinity_proc_template = downsample_icon(load_from_qrc(f':/icons/{int(round_half_down(ui_scale)*100)}.png'), ui_scale)
@@ -148,7 +148,7 @@ class ScreenScanner:
 
         if ui_screenshot is None: 
             self.exit_ = True
-            print("Error: Cannot find Warframe window")
+            print(f"Error: Cannot find window called {self.main_window.visible_windows[self.main_window.ui.window_name_combo.currentIndex()][1]}")
             return
         w, h, _ = ui_screenshot.shape
 
