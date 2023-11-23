@@ -9,20 +9,24 @@ class WindowCapture:
     cropped_x = cropped_y = 0
 
     # constructor
-    def __init__(self, window_name, capture_size, window):
+    def __init__(self, window_name, capture_size, window, hwnd=None):
         self.window = window
         self.window_name = window_name
         # find the handle for the window we want to capture
         self.cap_w, self.cap_h = capture_size
         self.screenshot_timestamp = 0
-        self.hwnd = None
+        self.hwnd = hwnd
         self.find_window()
 
     def find_window(self):
-        self.hwnd = win32gui.FindWindow(None, self.window_name)
-        if not self.hwnd:
-            print(f'Window not found: {self.window_name}')
-            return False
+        if self.hwnd is None:
+            self.hwnd = win32gui.FindWindow(None, self.window_name)
+            if not self.hwnd:
+                print(f'Window not found: {self.window_name}')
+                return False
+        else:
+            if not win32gui.IsWindow(self.hwnd):
+                return False
         return True
     
     def is_window(self):

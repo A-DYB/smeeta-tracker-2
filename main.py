@@ -5,6 +5,7 @@ import time
 import json
 import datetime
 from win32gui import GetWindowText, GetForegroundWindow
+import win32gui
 
 from PySide6.QtWidgets import QApplication, QWidget, QDoubleSpinBox, QFrame, QMessageBox
 from PySide6 import QtWidgets, QtGui, QtCore
@@ -18,7 +19,7 @@ import cv2
 import ctypes
 import requests
 import inspect
-from PySide6.QtWidgets import QComboBox, QCheckBox, QRadioButton, QSpinBox, QSlider
+from PySide6.QtWidgets import QComboBox, QCheckBox, QRadioButton, QSpinBox, QSlider, QLineEdit
 from pynput import keyboard
 import pickle
 import pandas as pd
@@ -60,12 +61,15 @@ class MainWindow(QWidget):
         self.script_folder = Path(__file__).parent.absolute()
         self.ui.smeeta_icon_widget.set_color([95, 255, 255])
         self.ui.text_color_widget.set_color([0, 0, 255])
+
+        self.visible_windows = [(None,'')]
+        self.refresh_window_name_combo()
         self.guirestore(QtCore.QSettings(os.path.join(self.script_folder, 'saved_settings.ini'), QtCore.QSettings.IniFormat))
+        self.refresh_window_name_combo()
 
-
-        user32 = ctypes.windll.user32
-        self.screen_capture:WindowCapture = WindowCapture('Warframe', ( user32.GetSystemMetrics(0) , user32.GetSystemMetrics(1) ), self.ui )
-        self.overlay:Overlay = Overlay()
+        self.user32 = ctypes.windll.user32
+        self.screen_capture:WindowCapture = WindowCapture(self.visible_windows[self.ui.window_name_combo.currentIndex()][1], ( self.user32.GetSystemMetrics(0) , self.user32.GetSystemMetrics(1) ), self.ui, hwnd=self.visible_windows[self.ui.window_name_combo.currentIndex()][0])
+        self.overlay:Overlay = Overlay(self)
         self.overlay.show()
         self.window_data:WindowData = WindowData(self.ui)
         self.monitor:Monitor = Monitor(self)
@@ -105,6 +109,9 @@ class MainWindow(QWidget):
         self.ui.test_bounds_button.clicked.connect(self.display_detection_area)
         self.ui.test_icon_threshold_button.clicked.connect(self.display_icon_filter)
         self.ui.test_text_threshold_button.clicked.connect(self.display_text_filter)
+
+        self.ui.refresh_window_name_combo_button.clicked.connect(self.refresh_window_name_combo)
+        self.ui.window_name_combo.currentIndexChanged.connect(self.set_scanner_window)
 
         #self.ui.ui_scale_spinner.lineEdit().setReadOnly(True)
 
@@ -171,11 +178,19 @@ class MainWindow(QWidget):
 
         for name, obj in inspect.getmembers(self.ui):
             # if type(obj) is QComboBox:  # this works similar to isinstance, but missed some field... not sure why?
-            if isinstance(obj, QComboBox):
+            if name == 'window_name_combo' and isinstance(obj, QComboBox):
+                name = obj.objectName()  # get combobox name
+                index = obj.currentIndex()  # get current index from combobox
+                text = obj.itemText(index)  # get the text for current index
+                result = " ".join(text.split()[1:])
+                settings.setValue(name, result)  # save combobox selection to registry
+
+            elif isinstance(obj, QComboBox):
                 name = obj.objectName()  # get combobox name
                 index = obj.currentIndex()  # get current index from combobox
                 text = obj.itemText(index)  # get the text for current index
                 settings.setValue(name, text)  # save combobox selection to registry
+
 
             if isinstance(obj, QCheckBox):
                 name = obj.objectName()
@@ -207,6 +222,11 @@ class MainWindow(QWidget):
                 value = obj.color_hsv          
                 settings.setValue(name, value)
 
+            if isinstance(obj, QLineEdit):
+                name = obj.objectName()
+                value = obj.text()
+                settings.setValue(name, value)
+
     def guirestore(self, settings:QtCore.QSettings):
         self.move(settings.value('pos', QtCore.QPoint(60, 60)))
         for name, obj in inspect.getmembers(self.ui):
@@ -219,15 +239,18 @@ class MainWindow(QWidget):
                 if value == "":
                     continue
 
-                index = obj.findText(value)
+                index = obj.findText(value, QtCore.Qt.MatchContains)
 
-                if index == -1:  # add to list if not found
-                    obj.insertItems(0, [value])
-                    index = obj.findText(value)
-                    obj.setCurrentIndex(index)
-                else:
-                    obj.setCurrentIndex(index)  # preselect a combobox value by index
-                    
+                if index != -1:
+                    obj.setCurrentIndex(index) 
+
+            if isinstance(obj, QLineEdit):
+                name = obj.objectName()
+                value = settings.value(name)
+                if value is not None:
+                    obj.clear()
+                    obj.insert(str(value))
+
             if isinstance(obj, QCheckBox):
                 name = obj.objectName()
                 value = settings.value(name)
@@ -350,7 +373,7 @@ class MainWindow(QWidget):
     
     def display_detection_area(self):
         if not self.monitor.screen_scanner.screen_capture.is_window():
-            self.display_error(f'Cannot find a window named "Warframe".')
+            self.display_error(f'Cannot find a window named "{self.visible_windows[self.ui.window_name_combo.currentIndex()][1]}".')
             return
         img = self.monitor.screen_scanner.screen_capture.get_screenshot()
         self.paint = PaintPicture(self)
@@ -358,7 +381,7 @@ class MainWindow(QWidget):
 
     def display_icon_filter(self):
         if not self.monitor.screen_scanner.screen_capture.is_window():
-            self.display_error(f'Cannot find a window named "Warframe".')
+            self.display_error(f'Cannot find a window named "{self.visible_windows[self.ui.window_name_combo.currentIndex()][1]}".')
             return
         img = self.monitor.screen_scanner.screen_capture.get_screenshot()
         filtered_scan = scanner.hsv_filter(img, self.ui.smeeta_icon_widget.color_hsv, h_sens=4, s_sens=60, v_scale=0.6)
@@ -367,7 +390,7 @@ class MainWindow(QWidget):
 
     def display_text_filter(self):
         if not self.monitor.screen_scanner.screen_capture.is_window():
-            self.display_error(f'Cannot find a window named "Warframe".')
+            self.display_error(f'Cannot find a window named "{self.visible_windows[self.ui.window_name_combo.currentIndex()][1]}".')
             return
         img = self.monitor.screen_scanner.screen_capture.get_screenshot()
         filtered_scan = self.monitor.screen_scanner.text_hsv_filter(img, self.ui.text_color_widget.color_hsv)
@@ -391,6 +414,36 @@ class MainWindow(QWidget):
         self.dlg.setText(error_message)
         self.dlg.setIcon(QMessageBox.Warning)
         self.dlg.exec()
+
+    def refresh_window_name_combo(self):
+        current_hwnd = self.visible_windows[self.ui.window_name_combo.currentIndex()][0]
+        current_wind_name = self.visible_windows[self.ui.window_name_combo.currentIndex()][1]
+        self.visible_windows = get_window_list()
+        if len(self.visible_windows) == 0:
+            self.visible_windows = [(0, '')]
+            return
+        visible_windows_str = [f'{a} {b}' for a,b in self.visible_windows]
+        self.ui.window_name_combo.clear()
+        self.ui.window_name_combo.addItems(visible_windows_str)
+
+        default_window = self.ui.default_window_lineedit.text()
+        if default_window != '':
+            # pattern = QtCore.QRegularExpression()
+            new_index = self.ui.window_name_combo.findText(fr'[0123456789]+\s({default_window})', QtCore.Qt.MatchRegularExpression)
+            if new_index != -1:
+                self.ui.window_name_combo.setCurrentIndex(new_index)
+                return
+            return
+
+        new_index = self.ui.window_name_combo.findText(f'{current_hwnd} {current_wind_name}')
+        if new_index != -1:
+            self.ui.window_name_combo.setCurrentIndex(new_index)
+            return
+
+    def set_scanner_window(self):
+        self.screen_capture = WindowCapture(self.visible_windows[self.ui.window_name_combo.currentIndex()][1], ( self.user32.GetSystemMetrics(0) , self.user32.GetSystemMetrics(1) ), self.ui, hwnd=self.visible_windows[self.ui.window_name_combo.currentIndex()][0])
+        ui_scale = self.window_data.ui_scale
+        self.monitor.screen_scanner.screen_capture = WindowCapture(self.visible_windows[self.ui.window_name_combo.currentIndex()][1], ( int(750*(1+(ui_scale-1)*0.5)) , int(300*(1+(ui_scale-1)*0.5)) ) , self, hwnd=self.visible_windows[self.ui.window_name_combo.currentIndex()][0])
 
 class WindowData():
     def __init__(self, ui) -> None:
@@ -554,8 +607,9 @@ class Hotkey():
         self.save_next_hotkey = True
 
 class Overlay(QtWidgets.QDialog):
-    def __init__(self):
+    def __init__(self, main_window):
         super(Overlay, self).__init__()
+        self.main_window = main_window
         self.setWindowIcon(QtGui.QIcon(':/icons/charm.png'))
 
         self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
@@ -563,8 +617,8 @@ class Overlay(QtWidgets.QDialog):
         self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.WindowStaysOnTopHint)
 
         layout = QtWidgets.QVBoxLayout(self)
-        self.scan_label_group = self.LabelGroup(layout)
-        self.log_label_group = self.LabelGroup(layout)
+        self.scan_label_group = self.LabelGroup(main_window, layout)
+        self.log_label_group = self.LabelGroup(main_window, layout)
   
         self.move(0, 1080//2)
 
@@ -573,7 +627,8 @@ class Overlay(QtWidgets.QDialog):
         self.log_label_group.set_text_size(size)
 
     class LabelGroup():
-        def __init__(self, layout) -> None:
+        def __init__(self, main_window, layout) -> None:
+            self.main_window = main_window
             self.label_list = []
             self.occupied_labels = 0
             self.count=0
@@ -584,7 +639,7 @@ class Overlay(QtWidgets.QDialog):
                 layout.addWidget(self.label_list[i])
 
         def add_text(self, text, color="white", bold=False):
-            if GetWindowText(GetForegroundWindow()) == 'Warframe':
+            if GetWindowText(GetForegroundWindow()) == self.main_window.visible_windows[self.main_window.ui.window_name_combo.currentIndex()][1]:
                 if self.occupied_labels >= len(self.label_list):
                     self.reset_text()
                 self.label_list[self.occupied_labels].setText(text)
@@ -798,6 +853,14 @@ def is_float(element: any) -> bool:
 
 def str2bool(v):
   return v.lower() in ("yes", "true", "t", "1")
+
+def get_window_list():
+    window_list = []
+    def enum_windows_callback(hwnd, window_list):
+        if win32gui.IsWindowVisible(hwnd):
+            window_list.append((hwnd, win32gui.GetWindowText(hwnd)))
+    win32gui.EnumWindows(enum_windows_callback, window_list)
+    return window_list
 
 if __name__ == "__main__":
     QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts)
