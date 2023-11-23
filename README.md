@@ -11,14 +11,14 @@ According to section 2.f of https://www.warframe.com/EULA, you agree that you wi
 # How to use
 This program only works on Windows, and was only tested on Windows 10.
 
-## Running the executable
+## Option 1: Running the executable
 1. Download the latest release from https://github.com/A-DYB/smeeta-tracker-2/releases
 2. If you want to keep your charm history and mission history, tranfer your "user_ExportRegions.json" and "charm_history.csv" files to the new directory
 3. Double click "Smeeta Tracker.exe"
 
 Note: If the directory is a mess and you want a clean view in File Explorer, make sure under "View" tab, "Hidden Items" is unchecked
 
-## Running as a Python Script
+## Option 2: Running as a Python Script
 1. Download the project files. (Or use "git clone https://github.com/A-DYB/smeeta-tracker-2.git")
 2. Make sure you have python 3.11.2 installed. https://www.python.org/downloads/release/python-3112/
 3. Open the project folder in Windows File Explorer
